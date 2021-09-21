@@ -8,7 +8,7 @@ terraform {
 }
 
 locals {
-    # prefix the resource names is the variable has been specified
+  # prefix the resource names is the variable has been specified
   name = try(length(var.resource_prefix), 0) > 0 ? "${var.resource_prefix}-${var.name}" : var.name
 
   # Set a boolean for the connect if the arc object has been set
@@ -26,23 +26,23 @@ locals {
     null
   )
 
-  arc = local.azcmagent_connect ? merge(var.arc, {tags = local.arc_tags_string}) : null
+  arc = local.azcmagent_connect ? merge(var.arc, { tags = local.arc_tags_string }) : null
 
   // Create the custom data file
+  // The FirstLogonCommands will copy custom_data multiline string to C:\AzureData\CustomData.bin C:\Terraform\custom_data.ps1 then runs it
+  // Transcript should go into C:\Terraform\custom_data.log
 
-  custom_data_base = file("${path.module}/files/winrm_http_imds.ps1")
-
-  custom_data_install = local.azcmagent_download ? file("${path.module}/files/azcmagent_install.ps1") : "Write-Host \"Skipping azcmagent installation.\""
-
-  custom_data_connect = local.azcmagent_connect ? templatefile("${path.module}/files/azcmagent_connect.tpl", local.arc) : "Write-Host \"Skipping Azure Arc connect step.\""
-
-  custom_data = join("\n", "Start-Transcript -Path C:\\\\Terraform\\custom_data.log", local.custom_data_base, local.custom_data_install, local.custom_data_connect, "Stop-Transcript")
-
-  // Append the
-
+  custom_data = join("\n", [
+    "Start-Transcript -Path C:\\Terraform\\custom_data.log",
+    file("${path.module}/files/azure_agent_imds.ps1"),
+    local.azcmagent_download ? file("${path.module}/files/azcmagent_install.ps1") : "Write-Host \"Skipping azcmagent installation.\"",
+    local.azcmagent_connect ? templatefile("${path.module}/files/azcmagent_connect.tpl", local.arc) : "Write-Host \"Skipping Azure Arc connect step.\"",
+    "Stop-Transcript"
+  ])
 }
 
-resource "azurerm_public_ip" "arc" {
+resource "azurerm_public_ip" "onprem" {
+  for_each            = toset(var.public_ip ? ["pip"] : [])
   name                = "${var.name}-pip"
   resource_group_name = var.resource_group_name
   location            = var.location
@@ -52,7 +52,7 @@ resource "azurerm_public_ip" "arc" {
   domain_name_label = var.dns_label
 }
 
-resource "azurerm_network_interface" "arc" {
+resource "azurerm_network_interface" "onprem" {
   name                = "${var.name}-nic"
   resource_group_name = var.resource_group_name
   location            = var.location
@@ -62,16 +62,16 @@ resource "azurerm_network_interface" "arc" {
     name                          = "internal"
     subnet_id                     = var.subnet_id
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = azurerm_public_ip.arc.id
+    public_ip_address_id          = var.public_ip ? azurerm_public_ip.onprem["pip"].id : null
   }
 }
 
-resource "azurerm_network_interface_application_security_group_association" "arc" {
-  network_interface_id          = azurerm_network_interface.arc.id
+resource "azurerm_network_interface_application_security_group_association" "onprem" {
+  network_interface_id          = azurerm_network_interface.onprem.id
   application_security_group_id = var.asg_id
 }
 
-resource "azurerm_windows_virtual_machine" "arc" {
+resource "azurerm_windows_virtual_machine" "onprem" {
   name                = var.name
   resource_group_name = var.resource_group_name
   location            = var.location
@@ -81,7 +81,7 @@ resource "azurerm_windows_virtual_machine" "arc" {
   admin_password = var.admin_password
   size           = var.size
 
-  network_interface_ids = [azurerm_network_interface.arc.id]
+  network_interface_ids = [azurerm_network_interface.onprem.id]
 
   source_image_reference {
     publisher = "MicrosoftWindowsServer"
@@ -100,16 +100,10 @@ resource "azurerm_windows_virtual_machine" "arc" {
   provision_vm_agent         = false
   allow_extension_operations = false
 
-  # Upload winrm PowerShell script via the custom data - enables winrm and blocks IMDS
+  # Upload winrm PowerShell script via the custom data
   custom_data = base64encode(local.custom_data)
 
-  # Set up winrm listener on http, or port 5985.
-  # Can also add an https listener on port 5986, but needs a cert in Azure Key Vault.
-  winrm_listener {
-    protocol = "Http"
-  }
-
-  # Autologon configuration needed for WinRM
+  # Autologon configuration to kic off those FirstLogon
   additional_unattend_content {
     setting = "AutoLogon"
     content = "<AutoLogon><Password><Value>${var.admin_password}</Value></Password><Enabled>true</Enabled><LogonCount>1</LogonCount><Username>${var.admin_username}</Username></AutoLogon>"
@@ -119,34 +113,5 @@ resource "azurerm_windows_virtual_machine" "arc" {
   additional_unattend_content {
     setting = "FirstLogonCommands"
     content = file("${path.module}/files/FirstLogonCommands.xml")
-  }
-
-  connection {
-    type     = "winrm"
-    port     = "5985"
-    host     = azurerm_public_ip.arc.ip_address
-    user     = var.admin_username
-    password = var.admin_password
-    https    = false
-    insecure = true
-    timeout  = "2m"
-  }
-
-  provisioner "remote-exec" {
-    on_failure = continue
-    inline = [
-      "PowerShell.exe -ExecutionPolicy Bypass Write-Host \"Inline PowerShell command\"",
-    ]
-  }
-
-  provisioner "file" {
-    source      = "${path.module}/files/test.ps1"
-    destination = "C:/Terraform/test.ps1"
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "PowerShell.exe -ExecutionPolicy Bypass C:\\\\Terraform\\test.ps1",
-    ]
   }
 }

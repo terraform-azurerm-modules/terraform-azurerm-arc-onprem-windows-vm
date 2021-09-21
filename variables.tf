@@ -17,7 +17,7 @@ variable "asg_id" {
 variable "resource_group_name" {
   description = "Name for the resource group. Required."
   type        = string
-  default     = "arc-onprem-servers"
+  default     = "onprem_servers"
 }
 
 //=============================================================
@@ -47,7 +47,7 @@ variable "azcmagent" {
 }
 
 variable "arc" {
-  description = "Object desribing the service principal and resource group for the Azure Arc connected machines. Requires azcmagent = true."
+  description = "Object describing the service principal and resource group for the Azure Arc connected machines. Requires azcmagent = true."
   type = object({
     tenant_id                = string
     subscription_id          = string
@@ -65,7 +65,7 @@ variable "arc" {
 //=============================================================
 
 variable "admin_username" {
-  default = "arcadmin"
+  default = "onpremadmin"
 }
 
 variable "admin_password" {
@@ -74,10 +74,22 @@ variable "admin_password" {
   sensitive = true
 }
 
+variable "public_ip" {
+  description = "Boolean to control public IP creation."
+  type        = bool
+  default     = false
+}
+
 variable "dns_label" {
   description = "Shortname for the public IP's FQDN."
   type        = string
   default     = null
+}
+
+variable "resource_prefix" {
+  description = "Optional prefix for the VM resources."
+  type        = string
+  default     = ""
 }
 
 //=============================================================
