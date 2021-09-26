@@ -13,4 +13,4 @@ New-NetFirewallRule -Name BlockAzureIMDS -DisplayName "Block access to Azure IMD
 # Add registry setting to allow WinRM with local administrator IDs
 # <https://docs.microsoft.com/windows-server/manage/windows-admin-center/support/troubleshooting#i-can-connect-to-some-servers-but-not-others>
 # REG ADD HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1
-New-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name  'LocalAccountTokenFilterPolicy' -Value '1' -PropertyType 'DWORD' –Force
+New-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name  'LocalAccountTokenFilterPolicy' -Value '1' -PropertyType 'DWORD' -Force
