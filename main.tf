@@ -96,6 +96,11 @@ resource "azurerm_windows_virtual_machine" "onprem" {
     storage_account_type = "Standard_LRS"
   }
 
+  // Pointless, but impossible to not have an identity
+  identity {
+    type = "SystemAssigned"
+  }
+
   # Don't provision the Azure Agent - needs to be missing for Azure Arc agent installation
   provision_vm_agent         = false
   allow_extension_operations = false
