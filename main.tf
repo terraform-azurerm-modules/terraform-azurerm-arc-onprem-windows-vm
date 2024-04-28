@@ -77,6 +77,8 @@ resource "azurerm_windows_virtual_machine" "onprem" {
   location            = var.location
   tags                = var.tags
 
+  depends_on = [ azurerm_network_interface_application_security_group_association.onprem ]
+
   admin_username = var.admin_username
   admin_password = var.admin_password
   size           = var.size
